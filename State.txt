@@ -1,0 +1,11 @@
+---- je suis rendu a installer le proxy/gatekeeper
+il faut dabord verifier qun install bien flask sur les instances du gatekeeper et du proxy 
+
+--- 
+
+il restera a verifier que mysql a bien ete installer sur les manager et sur le worker puis
+
+verifier les 3 forme de proxy 
+
+a send une requete a partir dun main.py 
+

@@ -1,0 +1,28 @@
+**/__pycache__
+**/venv
+**/.ssh
+
+# Ignore Terraform state files
+./terraform/terraform.tfstate
+terraform.tfstate.backup
+
+# Ignore Terraform directories
+**/terraform/.terraform/
+
+# Ignore crash logs
+crash.log
+terraform/.terraform/providers
+# Ignore any temporary Terraform files
+*.tfvars
+*.tfplan
+*.log
+
+# Ignore any sensitive data files
+*.pem
+*.key
+
+# Ignore Terraform directories and large files
+*.exe
+
+terraform/terraform.tfstate.backup
+terraform/terraform.tfstate
