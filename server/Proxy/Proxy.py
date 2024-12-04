@@ -5,7 +5,7 @@ import time
 
 app = Flask(__name__)
 
-# Backend URLs (remplacez avec les IP privées de vos instances)
+# Backend URLs (to be replaced dynamically via Terraform or script injection)
 MANAGER_URL = "http://<manager-private-ip>:5000"
 WORKERS_URLS = [
     "http://<worker-1-private-ip>:5000",
@@ -13,7 +13,12 @@ WORKERS_URLS = [
 ]
 
 # Routing strategies
-ROUTING_STRATEGY = "random"  # Options: "direct", "random", "fastest"
+ROUTING_STRATEGIES = ["direct", "random", "fastest"]
+ROUTING_STRATEGY = "direct"  
+
+# Benchmark data placeholder
+worker_loads = {url: 0 for url in WORKERS_URLS} 
+
 
 @app.route('/route', methods=['POST'])
 def proxy():
@@ -21,47 +26,38 @@ def proxy():
     if not data or "operation" not in data:
         return jsonify({"error": "Invalid request"}), 400
 
-    # Determine operation type (read or write)
     operation = data["operation"].lower()
+    strategy = data.get("strategy", ROUTING_STRATEGY)
+
+    if strategy not in ROUTING_STRATEGIES:
+        return jsonify({"error": "Invalid routing strategy"}), 400
 
     try:
-        # Strategy: Direct hit (all requests go to the Manager)
-        if ROUTING_STRATEGY == "direct":
-            if operation in ["read", "write"]:
-                response = forward_request(MANAGER_URL, data)
-                return response
-
-        # Strategy: Random (READ requests go to random Worker)
-        elif ROUTING_STRATEGY == "random":
-            if operation == "write":
-                response = forward_request(MANAGER_URL, data)
-            elif operation == "read":
-                worker_url = random.choice(WORKERS_URLS)
-                response = forward_request(worker_url, data)
-            else:
-                return jsonify({"error": "Unknown operation"}), 400
-            return response
-
-        # Strategy: Fastest (READ requests go to Worker with lowest ping)
-        elif ROUTING_STRATEGY == "fastest":
+        if strategy == "direct":
+            response = forward_request(MANAGER_URL, data)
+        elif strategy == "random":
+            target_url = random.choice(WORKERS_URLS if operation == "read" else [MANAGER_URL])
+            response = forward_request(target_url, data)
+        elif strategy == "fastest":
             if operation == "write":
                 response = forward_request(MANAGER_URL, data)
             elif operation == "read":
                 fastest_worker = get_fastest_worker()
                 response = forward_request(fastest_worker, data)
-            else:
-                return jsonify({"error": "Unknown operation"}), 400
-            return response
-
+        elif strategy == "custom":
+            if operation == "write":
+                response = forward_request(MANAGER_URL, data)
+            elif operation == "read":
+                less_busy_worker = get_less_busy_worker()
+                response = forward_request(less_busy_worker, data)
         else:
-            return jsonify({"error": "Invalid routing strategy"}), 400
-
-    except requests.exceptions.RequestException as e:
-        return jsonify({"error": "Failed to route request", "details": str(e)}), 500
+            return jsonify({"error": "Unknown strategy"}), 400
+        return response
+    except Exception as e:
+        return jsonify({"error": "Failed to process request", "details": str(e)}), 500
 
 
 def forward_request(url, data):
-    """Forward the request to the given URL."""
     try:
         response = requests.post(url, json=data)
         return jsonify(response.json()), response.status_code
@@ -70,19 +66,23 @@ def forward_request(url, data):
 
 
 def get_fastest_worker():
-    """Determine the worker with the lowest ping time."""
     ping_times = {}
     for worker_url in WORKERS_URLS:
-        start = time.time()
+        start_time = time.time()
         try:
-            requests.get(worker_url, timeout=2)  # Send a lightweight GET request
-            ping_times[worker_url] = time.time() - start
+            requests.get(worker_url, timeout=2)
+            ping_times[worker_url] = time.time() - start_time
         except requests.exceptions.RequestException:
-            ping_times[worker_url] = float('inf')  # Mark as unreachable
-
+            ping_times[worker_url] = float('inf')
     fastest_worker = min(ping_times, key=ping_times.get)
-    print(f"Fastest worker selected: {fastest_worker} with ping {ping_times[fastest_worker]} seconds")
     return fastest_worker
+
+
+def get_less_busy_worker():
+    # Replace with actual benchmarking logic, e.g., querying CloudWatch metrics
+    # Example: worker_loads = {"http://worker-1": 5, "http://worker-2": 2}
+    less_busy_worker = min(worker_loads, key=worker_loads.get)
+    return less_busy_worker
 
 
 if __name__ == '__main__':

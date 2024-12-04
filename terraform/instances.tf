@@ -9,12 +9,7 @@ resource "aws_instance" "gatekeeper" {
     Name = "Gatekeeper"
   }
 
-  user_data = <<-EOT
-    #!/bin/bash
-    apt-get update
-    apt-get install -y nginx
-    # Add custom setup for the gatekeeper application
-  EOT
+
 }
 
 resource "aws_instance" "proxy" {
@@ -28,12 +23,6 @@ resource "aws_instance" "proxy" {
     Name = "Proxy"
   }
 
-  user_data = <<-EOT
-    #!/bin/bash
-    apt-get update
-    apt-get install -y haproxy
-    # Add custom setup for proxy configuration
-  EOT
 }
 
 # Manager Instance
