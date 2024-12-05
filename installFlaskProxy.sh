@@ -9,7 +9,7 @@ sudo apt update -y
 
 # Install Python and pip
 echo "Installing Python, pip, and venv..."
-sudo apt-get install -y python3 python3-pip python3-venv awscli
+sudo apt-get install -y python3 python3-pip python3-venv sysbench
 
 # Create a virtual environment for Flask
 if [ ! -d "/opt/proxy_env" ]; then
@@ -36,7 +36,7 @@ from flask import Flask, request, jsonify
 import requests
 import random
 import time
-import boto3
+import subprocess
 
 app = Flask(__name__)
 
@@ -46,9 +46,6 @@ WORKERS_URLS = [
     "http://<worker-1-private-ip>:5000",
     "http://<worker-2-private-ip>:5000"
 ]
-
-# AWS region for CloudWatch
-AWS_REGION = "us-east-1"
 
 # Routing strategies
 ROUTING_STRATEGY = "random"  # Options: "direct", "random", "fastest", "custom"
@@ -71,7 +68,7 @@ def proxy():
             target_url = get_fastest_worker() if operation == "read" else MANAGER_URL
             response = forward_request(target_url, data)
         elif ROUTING_STRATEGY == "custom":
-            target_url = get_less_busy_worker() if operation == "read" else MANAGER_URL
+            target_url = get_least_busy_worker() if operation == "read" else MANAGER_URL
             response = forward_request(target_url, data)
         else:
             return jsonify({"error": "Invalid routing strategy"}), 400
@@ -100,30 +97,26 @@ def get_fastest_worker():
     return min(ping_times, key=ping_times.get)
 
 
-def get_less_busy_worker():
-    cloudwatch = boto3.client('cloudwatch', region_name=AWS_REGION)
-    worker_loads = {}
+def get_least_busy_worker():
+    sysbench_loads = {}
     for worker_url in WORKERS_URLS:
-        instance_id = get_instance_id_from_url(worker_url)
         try:
-            response = cloudwatch.get_metric_statistics(
-                Namespace='AWS/EC2',
-                MetricName='CPUUtilization',
-                Dimensions=[{'Name': 'InstanceId', 'Value': instance_id}],
-                StartTime=time.time() - 300,
-                EndTime=time.time(),
-                Period=60,
-                Statistics=['Average']
+            instance_ip = worker_url.split("//")[1].split(":")[0]
+            sysbench_command = (
+                f"sysbench cpu --cpu-max-prime=2000 run | grep 'total time:'"
             )
-            worker_loads[worker_url] = response['Datapoints'][0]['Average'] if response['Datapoints'] else float('inf')
-        except Exception:
-            worker_loads[worker_url] = float('inf')
-    return min(worker_loads, key=worker_loads.get)
+            result = subprocess.run(
+                ["ssh", "-o", "StrictHostKeyChecking=no", f"ubuntu@{instance_ip}", sysbench_command],
+                capture_output=True,
+                text=True
+            )
+            total_time_line = result.stdout.strip().split("\n")[-1]
+            total_time = float(total_time_line.split(":")[-1].strip().replace("s", ""))
+            sysbench_loads[worker_url] = total_time
+        except Exception as e:
+            sysbench_loads[worker_url] = float('inf')  # Assign high load on failure
+    return min(sysbench_loads, key=sysbench_loads.get)
 
-
-def get_instance_id_from_url(worker_url):
-    # Replace this mapping logic with the correct worker URL-to-instance ID mapping
-    return "<worker-instance-id>"
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000)

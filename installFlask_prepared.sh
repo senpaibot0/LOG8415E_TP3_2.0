@@ -32,7 +32,7 @@ sudo mkdir -p /opt/gatekeeper_app
 sudo chown ubuntu:ubuntu /opt/gatekeeper_app
 
 # Dynamically set the Proxy's public IP (to be replaced in the script)
-PROXY_PUBLIC_IP="<PROXY_PUBLIC_IP_PLACEHOLDER>"
+PROXY_PUBLIC_IP="3.238.156.200"
 
 # Create the Gatekeeper Flask application
 cat <<EOF | sudo tee /opt/gatekeeper_app/gatekeeper.py > /dev/null

@@ -36,19 +36,19 @@ def terraform_output():
     try:
         result = subprocess.run(
             ["terraform", "output", "-json"],
-            cwd="./terraform",  # Adjust the path if needed
+            cwd="./terraform",
             capture_output=True,
             text=True,
             check=True
         )
         outputs = json.loads(result.stdout)
         
-        # Parse outputs dynamically
+        # Return correctly labeled IPs
         return {
             "gatekeeper_public_ip": outputs["gatekeeper_public_ip"]["value"],
             "proxy_public_ip": outputs["proxy_public_ip"]["value"],
-            "manager_private_ip": outputs["manager_private_ip"]["value"],
-            "worker_private_ips": outputs["worker_private_ips"]["value"]
+            "manager_public_ip": outputs["manager_public_ip"]["value"],  # Correct key name
+            "worker_public_ips": outputs["worker_public_ips"]["value"]
         }
     except KeyError as e:
         print(f"KeyError: {e}. Please check the Terraform outputs for the correct key names.")
@@ -60,13 +60,16 @@ def terraform_output():
         print(f"Unexpected error: {e}")
         raise
 
-# Sending Requests to Gatekeeper
-def send_requests(gatekeeper_ip, operation, count=100):
+
+def send_requests_with_strategy(gatekeeper_ip, operation, strategy, count=100):
+    """
+    Send requests to Gatekeeper with a specific routing strategy.
+    """
     url = f"http://{gatekeeper_ip}:5000/validate"
     headers = {"Authorization": "valid_token"}
-    payload = {"operation": operation}
+    payload = {"operation": operation, "strategy": strategy}
 
-    print(f"Sending {count} {operation.upper()} requests to Gatekeeper...")
+    print(f"Sending {count} {operation.upper()} requests using {strategy.upper()} strategy...")
     for i in range(count):
         try:
             response = requests.post(url, headers=headers, json=payload)
@@ -102,6 +105,7 @@ def install_to_instance(ip_address, script_name):
         print(f"Error executing {script_name} on {ip_address}: {e.stderr}")
     except Exception as e:
         print(f"Unexpected error: {e}")
+
 
 def benchmark_database(instance_ips, instance_type):
     """
@@ -140,6 +144,20 @@ def benchmark_database(instance_ips, instance_type):
         except Exception as e:
             print(f"Unexpected error during benchmarking on {ip}: {e}")
 
+def prepare_install_flask_script(proxy_ip):
+    # Load the original script
+    with open("installFlask.sh", "r") as file:
+        script_content = file.read()
+
+    # Replace the placeholder with the actual Proxy public IP
+    updated_content = script_content.replace("<PROXY_PUBLIC_IP_PLACEHOLDER>", proxy_ip)
+
+    # Save the modified script
+    with open("installFlask_prepared.sh", "w") as file:
+        file.write(updated_content)
+
+    print("installFlask.sh prepared with Proxy IP.") 
+
 def main():
     try:
         # Step 1: Initialize Terraform
@@ -152,44 +170,52 @@ def main():
         # Step 3: Retrieve Terraform outputs
         outputs = terraform_output()
 
-        # Dynamic IP addresses
+        # Use public IPs
         gatekeeper_ip = outputs["gatekeeper_public_ip"]
         proxy_ip = outputs["proxy_public_ip"]
-        manager_ip = [outputs["manager_private_ip"]]
-        worker_ips = outputs["worker_private_ips"]
+        manager_ip = [outputs["manager_public_ip"]]
+        worker_ips = outputs["worker_public_ips"]
 
+        prepare_install_flask_script(proxy_ip)
+        
         print(f"Gatekeeper IP: {gatekeeper_ip}")
         print(f"Proxy IP: {proxy_ip}")
         print(f"Manager IP: {manager_ip}")
         print(f"Worker IPs: {worker_ips}")
 
+        # Install MySQL on Manager and Worker instances
+        for ip in manager_ip + worker_ips:
+            install_to_instance(ip, "installMysql.sh")
+
         # Step 4: Wait for instances to boot up
         print("Waiting for instances to boot up...")
-        time.sleep(15)
+        time.sleep(10)
 
-        # Step 5: Benchmark the database on the Manager
+        # Step 5: Benchmark the database on Manager and Workers
         benchmark_database(manager_ip, "Manager")
-
-        # Step 6: Benchmark the database on Workers
         benchmark_database(worker_ips, "Worker")
 
-        # Step 7: Install Flask on Gatekeeper
+        # Step 6: Install Flask on Gatekeeper and Proxy
         install_to_instance(gatekeeper_ip, "installFlask.sh")
-
-        # Step 8: Install Flask on Proxy
         install_to_instance(proxy_ip, "installFlaskProxy.sh")
 
-        # Step 9: Send requests via the Gatekeeper
-        send_requests(gatekeeper_ip, operation="read", count=10)
-        send_requests(gatekeeper_ip, operation="write", count=10)
+        # Step 7: Send requests with different strategies
+        strategies = ["direct", "custom", "fastest", "random"]
+        for strategy in strategies:
+            send_requests_with_strategy(gatekeeper_ip, operation="read", strategy=strategy, count=50)
+            send_requests_with_strategy(gatekeeper_ip, operation="write", strategy=strategy, count=50)
 
         print("Requests completed successfully.")
 
-        # Optional Step: Destroy resources
-        # terraform_destroy()
+        # Step 8: Destroy Terraform resources
+        terraform_destroy()
 
     except Exception as e:
         print(f"An error occurred: {str(e)}")
+
+
+if __name__ == "__main__":
+    main()
 
 
 if __name__ == "__main__":
