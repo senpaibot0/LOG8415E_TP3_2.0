@@ -125,27 +125,64 @@ resource "aws_security_group" "manager_sg" {
   description = "Allow traffic from Proxy for read and write operations"
   vpc_id      = var.vpc_id
 
-  # Allow SSH and MySQL traffic
+   # Allow HTTP and HTTPS traffic from the internet
   ingress {
-    from_port   = 22
-    to_port     = 22
+    from_port   = var.http_port
+    to_port     = var.http_port
     protocol    = "tcp"
     cidr_blocks = ["0.0.0.0/0"]
   }
   ingress {
-    from_port   = 3306
-    to_port     = 3306
+  from_port   = 22
+  to_port     = 22
+  protocol    = "tcp"
+  cidr_blocks = ["0.0.0.0/0"] 
+}
+ingress {
+  from_port   = 5000
+  to_port     = 5000
+  protocol    = "tcp"
+  cidr_blocks = ["0.0.0.0/0"] 
+}
+
+  ingress {
+    from_port   = var.https_port
+    to_port     = var.https_port
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+   ingress {
+    from_port   = 80
+    to_port     = 80
     protocol    = "tcp"
     cidr_blocks = ["0.0.0.0/0"]
   }
 
-  # Allow all outgoing traffic
+  # Allow MySQL traffic to Proxy (using Proxy CIDR range)
   egress {
+    from_port   = var.mysql_port
+    to_port     = var.mysql_port
+    protocol    = "tcp"
+    cidr_blocks = ["172.31.0.0/16"]  
+  }
+    egress {
     from_port   = 0
     to_port     = 0
     protocol    = "-1"
     cidr_blocks = ["0.0.0.0/0"]
   }
+   egress {
+    from_port   = 80
+    to_port     = 80
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+  egress {
+  from_port   = 5000
+  to_port     = 5000
+  protocol    = "tcp"
+  cidr_blocks = ["0.0.0.0/0"] 
+}
 }
 
 resource "aws_security_group" "worker_sg" {
@@ -153,27 +190,64 @@ resource "aws_security_group" "worker_sg" {
   description = "Allow traffic from Proxy for read-only operations"
   vpc_id      = var.vpc_id
 
-  # Allow SSH and MySQL traffic
+   # Allow HTTP and HTTPS traffic from the internet
   ingress {
-    from_port   = 22
-    to_port     = 22
+    from_port   = var.http_port
+    to_port     = var.http_port
     protocol    = "tcp"
     cidr_blocks = ["0.0.0.0/0"]
   }
   ingress {
-    from_port   = 3306
-    to_port     = 3306
+  from_port   = 22
+  to_port     = 22
+  protocol    = "tcp"
+  cidr_blocks = ["0.0.0.0/0"] 
+}
+ingress {
+  from_port   = 5000
+  to_port     = 5000
+  protocol    = "tcp"
+  cidr_blocks = ["0.0.0.0/0"] 
+}
+
+  ingress {
+    from_port   = var.https_port
+    to_port     = var.https_port
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+   ingress {
+    from_port   = 80
+    to_port     = 80
     protocol    = "tcp"
     cidr_blocks = ["0.0.0.0/0"]
   }
 
-  # Allow all outgoing traffic
+  # Allow MySQL traffic to Proxy (using Proxy CIDR range)
   egress {
+    from_port   = var.mysql_port
+    to_port     = var.mysql_port
+    protocol    = "tcp"
+    cidr_blocks = ["172.31.0.0/16"]  
+  }
+    egress {
     from_port   = 0
     to_port     = 0
     protocol    = "-1"
     cidr_blocks = ["0.0.0.0/0"]
   }
+   egress {
+    from_port   = 80
+    to_port     = 80
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+  egress {
+  from_port   = 5000
+  to_port     = 5000
+  protocol    = "tcp"
+  cidr_blocks = ["0.0.0.0/0"] 
+}
 }
 
 
